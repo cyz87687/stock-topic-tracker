@@ -35,20 +35,6 @@ function calcConsecutiveDays(kline: KlinePoint[]): number {
   return days
 }
 
-function calcRankTrend(kline: KlinePoint[], allKlines: Record<string, KlinePoint[]>): number[] {
-  const recent = kline.slice(-7)
-  return recent.map((point) => {
-    const dayChanges: { name: string; change: number }[] = []
-    for (const [name, kl] of Object.entries(allKlines)) {
-      const dayPoint = kl.find((k) => k.date === point.date)
-      if (dayPoint) dayChanges.push({ name, change: dayPoint.change_percent })
-    }
-    dayChanges.sort((a, b) => b.change - a.change)
-    const rank = dayChanges.findIndex((d) => d.name === name) + 1
-    return rank || 99
-  })
-}
-
 export async function getDailyTopics(date?: string): Promise<DailyTopic[]> {
   const targetDate = date || today()
   const cacheKey = `daily_${targetDate}`

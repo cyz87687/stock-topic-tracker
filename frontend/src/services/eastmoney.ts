@@ -1,10 +1,5 @@
 import * as cache from './cache'
 
-const HEADERS: Record<string, string> = {
-  'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36',
-  Referer: 'https://data.eastmoney.com/',
-}
-
 function jsonp<T>(url: string, params: Record<string, string | number>): Promise<T> {
   return new Promise((resolve, reject) => {
     const cbName = `__stk_cb_${Date.now()}_${Math.random().toString(36).slice(2, 8)}`
@@ -16,11 +11,11 @@ function jsonp<T>(url: string, params: Record<string, string | number>): Promise
 
     function cleanup() {
       clearTimeout(timeout)
-      delete (window as Record<string, unknown>)[cbName]
+      delete (window as unknown as Record<string, unknown>)[cbName]
       if (script.parentNode) script.parentNode.removeChild(script)
     }
 
-    ;(window as Record<string, unknown>)[cbName] = (data: T) => {
+    ;(window as unknown as Record<string, unknown>)[cbName] = (data: T) => {
       cleanup()
       resolve(data)
     }

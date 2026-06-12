@@ -1,10 +1,10 @@
-import { useState, useEffect, useCallback } from 'react'
+import { useState, useEffect, useCallback, useRef } from 'react'
 import { getDailyTopics, getTopicTrend, getTopicStrength, refreshCache } from '@/api'
 import { formatPercent, getChangeColor, getStrengthLevel } from '@/utils/helpers'
 import type { DailyTopic, TopicTrendItem, TopicStrengthData } from '@/types'
 import TrendChart from '@/components/TrendChart'
 import StrengthIndicator from '@/components/StrengthIndicator'
-import { RefreshCw } from 'lucide-react'
+import { RefreshCw, ChevronLeft, ChevronRight } from 'lucide-react'
 import clsx from 'clsx'
 import ReactECharts from 'echarts-for-react'
 import type { EChartsOption } from 'echarts'
@@ -16,6 +16,8 @@ export default function StrengthAnalysis() {
   const [strength, setStrength] = useState<TopicStrengthData | null>(null)
   const [loading, setLoading] = useState(true)
   const [refreshing, setRefreshing] = useState(false)
+  const tabScrollRef = useRef<HTMLDivElement>(null)
+  const detailRef = useRef<HTMLDivElement>(null)
 
   const fetchTopics = useCallback(async () => {
     try {
@@ -65,6 +67,22 @@ export default function StrengthAnalysis() {
     } finally {
       setRefreshing(false)
     }
+  }
+
+  const handleTopicSelect = (topicName: string) => {
+    setSelectedTopic(topicName)
+    setTimeout(() => {
+      detailRef.current?.scrollIntoView({ behavior: 'smooth', block: 'start' })
+    }, 100)
+  }
+
+  const scrollTabs = (direction: 'left' | 'right') => {
+    if (!tabScrollRef.current) return
+    const scrollAmount = 160
+    tabScrollRef.current.scrollBy({
+      left: direction === 'left' ? -scrollAmount : scrollAmount,
+      behavior: 'smooth',
+    })
   }
 
   const barOption: EChartsOption = {
@@ -159,33 +177,58 @@ export default function StrengthAnalysis() {
 
       <div className="card p-3.5">
         <h2 className="text-sm font-semibold text-white mb-3">题材强弱排行</h2>
-        <div className="space-y-2.5">
-          {topics.slice(0, 10).map((topic) => {
-            const level = getStrengthLevel(topic.change_percent)
-            return (
-              <button
-                key={topic.id}
-                onClick={() => setSelectedTopic(topic.topic_name)}
-                className={clsx(
-                  'w-full flex items-center gap-3 p-2.5 rounded-lg transition-colors text-left',
-                  selectedTopic === topic.topic_name ? 'bg-bg-hover' : 'hover:bg-bg-hover/30'
-                )}
-              >
-                <span className="text-xs text-slate-500 w-5">{topic.rank}</span>
-                <span className="text-sm text-white flex-1 truncate">{topic.topic_name}</span>
-                <span className={clsx('text-xs font-medium', level.color)}>{level.label}</span>
-                <span className={clsx('text-sm font-bold', getChangeColor(topic.change_percent))}>
-                  {formatPercent(topic.change_percent)}
-                </span>
-              </button>
-            )
-          })}
+        <div className="relative">
+          <button
+            onClick={() => scrollTabs('left')}
+            className="absolute left-0 top-1/2 -translate-y-1/2 z-10 w-6 h-6 flex items-center justify-center bg-slate-700/90 rounded-full text-slate-300 hover:bg-slate-600 transition-colors -ml-1"
+          >
+            <ChevronLeft size={12} />
+          </button>
+          <div
+            ref={tabScrollRef}
+            className="flex gap-2 overflow-x-auto scrollbar-hide py-1 px-5"
+            style={{ scrollBehavior: 'smooth', WebkitOverflowScrolling: 'touch' }}
+          >
+            {topics.slice(0, 10).map((topic) => {
+              const level = getStrengthLevel(topic.change_percent)
+              const isActive = selectedTopic === topic.topic_name
+              return (
+                <button
+                  key={topic.id}
+                  onClick={() => handleTopicSelect(topic.topic_name)}
+                  className={clsx(
+                    'flex-shrink-0 px-3 py-2 rounded-xl text-xs font-medium transition-all duration-200 whitespace-nowrap border',
+                    isActive
+                      ? 'bg-up/20 text-up border-up/30 scale-105 shadow-lg shadow-up/10'
+                      : 'bg-slate-800/80 text-slate-400 border-slate-700/50 hover:bg-slate-700 hover:text-slate-300'
+                  )}
+                >
+                  <div className="flex items-center gap-1.5">
+                    <span className="text-[10px] text-slate-500">{topic.rank}</span>
+                    <span className="truncate max-w-[72px]">{topic.topic_name}</span>
+                  </div>
+                  <div className="flex items-center justify-between mt-1 gap-2">
+                    <span className={clsx('text-[10px]', level.color)}>{level.label}</span>
+                    <span className={clsx('text-[10px] font-bold', getChangeColor(topic.change_percent))}>
+                      {formatPercent(topic.change_percent)}
+                    </span>
+                  </div>
+                </button>
+              )
+            })}
+          </div>
+          <button
+            onClick={() => scrollTabs('right')}
+            className="absolute right-0 top-1/2 -translate-y-1/2 z-10 w-6 h-6 flex items-center justify-center bg-slate-700/90 rounded-full text-slate-300 hover:bg-slate-600 transition-colors -mr-1"
+          >
+            <ChevronRight size={12} />
+          </button>
         </div>
       </div>
 
       {selectedTopic && strength && (
-        <>
-          <div className="card p-3.5">
+        <div ref={detailRef} className="space-y-3 scroll-mt-4">
+          <div className="card p-3.5 animate-fade-in">
             <div className="flex items-center justify-between mb-3">
               <h2 className="text-sm font-semibold text-white">{selectedTopic}</h2>
               <div className="flex items-center gap-2">
@@ -258,7 +301,7 @@ export default function StrengthAnalysis() {
             </div>
           </div>
 
-          <div className="card p-3.5">
+          <div className="card p-3.5 animate-fade-in" style={{animationDelay: '100ms'}}>
             <h2 className="text-sm font-semibold text-white mb-2">30日趋势</h2>
             {trendData.length > 0 ? (
               <TrendChart data={trendData} title="" height={200} />
@@ -268,7 +311,7 @@ export default function StrengthAnalysis() {
               </div>
             )}
           </div>
-        </>
+        </div>
       )}
     </div>
   )

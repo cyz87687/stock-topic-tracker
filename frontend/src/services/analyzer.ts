@@ -7,6 +7,7 @@ import type {
 import {
   fetchConceptBoards, fetchAllConceptBoards, fetchMarketIndices,
   fetchBoardStocks, fetchBatchKlines, fetchIndexKline,
+  fetchStockKline, calcConsecutiveLimitDays,
   guessCategory, type RawBoard, type RawStock, type KlinePoint,
 } from './eastmoney'
 import * as cache from './cache'
@@ -497,43 +498,66 @@ export async function getHeatmap(): Promise<HeatmapDay[]> {
   return result
 }
 
-export async function getLimitBoard(sort: string = 'limit_days'): Promise<LimitBoardItem[]> {
-  const cacheKey = `limit_board_${sort}`
+export async function getLimitBoard(): Promise<LimitBoardItem[]> {
+  const cacheKey = 'limit_board_data'
   const cached = cache.get<LimitBoardItem[]>(cacheKey)
   if (cached) return cached
 
   const boards = await fetchConceptBoards(20)
-  const allStocks: LimitBoardItem[] = []
 
   const stockPromises = boards.map((b) => fetchBoardStocks(b.board_code, 10))
   const stockResults = await Promise.all(stockPromises)
 
+  const limitUpEntries: { stock: RawStock; board: RawBoard }[] = []
   boards.forEach((board, i) => {
     const stocks = stockResults[i] || []
     stocks.forEach((s) => {
       if (s.is_limit_up) {
-        const heat = Math.round(
-          s.consecutive_limit_days * 20 +
-          s.change_percent * 2 +
-          (s.is_leader ? 15 : 0) +
-          (20 - board.rank)
-        )
-        allStocks.push({
-          stock_code: s.stock_code,
-          stock_name: s.stock_name,
-          change_percent: s.change_percent,
-          consecutive_limit_days: s.consecutive_limit_days,
-          is_leader: s.is_leader,
-          topic_name: board.topic_name,
-          heat,
-        })
+        limitUpEntries.push({ stock: s, board })
       }
     })
   })
 
-  allStocks.sort((a, b) =>
-    sort === 'heat' ? b.heat - a.heat : b.consecutive_limit_days - a.consecutive_limit_days
-  )
+  const batchSize = 5
+  const klineResults: KlinePoint[][] = []
+  for (let i = 0; i < limitUpEntries.length; i += batchSize) {
+    const batch = limitUpEntries.slice(i, i + batchSize)
+    const results = await Promise.all(
+      batch.map(({ stock }) => fetchStockKline(stock.stock_code, stock.stock_name, 15))
+    )
+    klineResults.push(...results)
+  }
+
+  const allStocks: LimitBoardItem[] = limitUpEntries.map(({ stock, board }, i) => {
+    const kline = klineResults[i] || []
+    const consecutiveDays = kline.length > 0
+      ? calcConsecutiveLimitDays(kline, stock.stock_code, stock.stock_name)
+      : 1
+
+    const heat = Math.round(
+      consecutiveDays * 20 +
+      stock.change_percent * 2 +
+      (stock.is_leader ? 15 : 0) +
+      (20 - board.rank)
+    )
+
+    return {
+      stock_code: stock.stock_code,
+      stock_name: stock.stock_name,
+      change_percent: stock.change_percent,
+      consecutive_limit_days: consecutiveDays,
+      is_leader: stock.is_leader,
+      topic_name: board.topic_name,
+      heat,
+    }
+  })
+
+  allStocks.sort((a, b) => {
+    if (b.consecutive_limit_days !== a.consecutive_limit_days) {
+      return b.consecutive_limit_days - a.consecutive_limit_days
+    }
+    return b.heat - a.heat
+  })
 
   cache.set(cacheKey, allStocks, 300)
   return allStocks

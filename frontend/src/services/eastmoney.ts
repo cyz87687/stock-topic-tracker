@@ -79,11 +79,70 @@ export function guessCategory(name: string): string {
   return '概念'
 }
 
-function isLimitUp(code: string, change: number): boolean {
+function isLimitUp(code: string, change: number, name?: string): boolean {
   if (typeof change !== 'number') return false
+  if (name && (name.includes('ST') || name.includes('*ST'))) return change >= 4.5
   if (code.startsWith('3') || code.startsWith('688')) return change >= 19.5
-  if (code.startsWith('ST') || code.startsWith('*ST')) return change >= 4.5
   return change >= 9.5
+}
+
+function getSecId(code: string): string {
+  if (code.startsWith('6')) return `1.${code}`
+  return `0.${code}`
+}
+
+export function calcConsecutiveLimitDays(kline: KlinePoint[], code: string, name?: string): number {
+  let days = 0
+  for (let i = kline.length - 1; i >= 0; i--) {
+    if (isLimitUp(code, kline[i].change_percent, name)) {
+      days++
+    } else {
+      break
+    }
+  }
+  return days
+}
+
+export async function fetchStockKline(code: string, name: string, days = 15): Promise<KlinePoint[]> {
+  const cacheKey = `stock_kline_${code}`
+  const cached = cache.get<KlinePoint[]>(cacheKey)
+  if (cached) return cached
+
+  const secid = getSecId(code)
+  const end = new Date()
+  const start = new Date()
+  start.setDate(start.getDate() - days + 10)
+  const beg = start.toISOString().slice(0, 10).replace(/-/g, '')
+  const endStr = end.toISOString().slice(0, 10).replace(/-/g, '')
+
+  const url = emHisUrl('/api/qt/stock/kline/get')
+  const params: Record<string, string | number> = {
+    secid,
+    fields1: 'f1,f2,f3,f4,f5,f6',
+    fields2: 'f51,f52,f53,f54,f55,f56,f57,f58,f59,f60,f61',
+    klt: 101, fqt: 1, beg, end: endStr,
+  }
+
+  try {
+    const data = await jsonp<{ data?: { klines?: string[] } }>(url, params)
+    const klines = data.data?.klines || []
+    const result: KlinePoint[] = []
+    for (const line of klines) {
+      const parts = line.split(',')
+      if (parts.length >= 11) {
+        result.push({
+          date: parts[0],
+          close: safeFloat(parts[2], 0),
+          change_percent: safeFloat(parts[8], 0),
+        })
+      }
+    }
+    cache.set(cacheKey, result, 1800)
+    return result
+  } catch (e) {
+    console.error('[EM] fetchStockKline error:', code, e)
+    return []
+  }
 }
 
 export interface RawBoard {
@@ -334,8 +393,8 @@ export async function fetchBoardStocks(boardCode: string, topN = 10): Promise<Ra
         stock_name: name,
         change_percent: change,
         is_leader: i === 0,
-        is_limit_up: isLimitUp(code, change),
-        consecutive_limit_days: isLimitUp(code, change) ? 1 : 0,
+        is_limit_up: isLimitUp(code, change, name),
+        consecutive_limit_days: isLimitUp(code, change, name) ? 1 : 0,
       })
     }
     cache.set(cacheKey, stocks, 300)

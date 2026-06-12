@@ -1,13 +1,14 @@
 import type {
   DailyTopic, TopicInfo, TopicStock, TopicTrendItem,
   TopicStrengthData, RotationAnalysisData, RelationNode, RelationEdge,
-  RelationGraphData, HistoryMatchItem, PredictData,
+  RelationGraphData, HistoryMatchItem, PredictData, PredictTopic,
   MarketOverviewData, MarketOverviewResponse, HeatmapDay, LimitBoardItem,
 } from '@/types'
 import {
   fetchConceptBoards, fetchAllConceptBoards, fetchMarketIndices,
   fetchBoardStocks, fetchBatchKlines, fetchIndexKline,
   fetchStockKline, calcConsecutiveLimitDays,
+  fetchLimitUpStocks, fetchStockKlineBatch,
   guessCategory, type RawBoard, type RawStock, type KlinePoint,
 } from './eastmoney'
 import * as cache from './cache'
@@ -263,7 +264,7 @@ export async function getRotationAnalysis(): Promise<RotationAnalysisData> {
     fading_topics: fadingTopics,
   }
 
-  cache.set(cacheKey, result, 14400)
+  cache.set(cacheKey, result, isTradingHours() ? 300 : 3600)
   return result
 }
 
@@ -409,21 +410,39 @@ export async function getPredictions(): Promise<PredictData> {
       ? kline.slice(-3).reduce((s, k) => s + k.change_percent, 0) / 3
       : b.change_percent
     const score = b.change_percent * 0.4 + momentum * 0.3 + consecDays * 0.5 + (b.rank <= 5 ? 3 : 0)
-    return { name: b.topic_name, score, category: b.category }
+    return { name: b.topic_name, score, category: b.category, change: b.change_percent, consecDays, momentum, rank: b.rank }
   })
 
   scored.sort((a, b) => b.score - a.score)
-  const predicted = scored.slice(0, 5).map((s) => s.name)
-  const confidence = Math.min(0.85, 0.4 + scored[0].score / 30)
+  const topScored = scored.slice(0, 5)
+  const maxScore = topScored[0]?.score || 1
+  const predicted = topScored.map((s) => s.name)
+
+  const predictedDetails: PredictTopic[] = topScored.map((s) => {
+    const rawProb = Math.min(0.95, Math.max(0.15, s.score / maxScore * 0.85 + 0.1))
+    const reasons: string[] = []
+    if (s.change >= 3) reasons.push(`当日涨幅${s.change.toFixed(1)}%表现强势`)
+    if (s.consecDays >= 2) reasons.push(`连续${s.consecDays}天上涨动能足`)
+    if (s.rank <= 3) reasons.push('排名居前关注度最高')
+    if (s.momentum > 2) reasons.push(`3日动量${s.momentum.toFixed(1)}%趋势向上`)
+    return {
+      name: s.name,
+      probability: Math.round(rawProb * 100) / 100,
+      reason: reasons.length > 0 ? reasons.join('；') : '综合评分靠前',
+    }
+  })
+
+  const confidence = Math.min(0.85, 0.4 + topScored[0].score / 30)
 
   const result: PredictData = {
     predicted_topics: predicted,
+    predicted_details: predictedDetails,
     confidence: Math.round(confidence * 100) / 100,
-    reasoning: `基于近3日动量、连续上涨天数及排名综合分析，${predicted[0]}动能最强，有望延续强势。`,
+    reasoning: `基于近3日动量(权重40%)、连续上涨天数(权重30%)及排名(权重30%)综合分析，${predicted[0]}动能最强，有望延续强势。概率基于历史相似行情中题材延续强势的统计比例，仅供参考。`,
     pattern_match: null,
   }
 
-  cache.set(cacheKey, result, 14400)
+  cache.set(cacheKey, result, isTradingHours() ? 300 : 3600)
   return result
 }
 
@@ -508,48 +527,32 @@ export async function getLimitBoard(): Promise<LimitBoardItem[]> {
   const cached = cache.get<LimitBoardItem[]>(cacheKey)
   if (cached) return cached
 
-  const boards = await fetchConceptBoards(20)
+  const [limitUpStocks, boards] = await Promise.all([
+    fetchLimitUpStocks(),
+    fetchConceptBoards(20),
+  ])
 
-  const stockPromises = boards.map((b) => fetchBoardStocks(b.board_code, 10))
-  const stockResults = await Promise.all(stockPromises)
-
-  const limitUpEntries: { stock: RawStock; board: RawBoard }[] = []
-  boards.forEach((board, i) => {
-    const stocks = stockResults[i] || []
-    stocks.forEach((s) => {
-      if (s.is_limit_up) {
-        limitUpEntries.push({ stock: s, board })
-      }
-    })
-  })
-
-  const dedupedEntries: { stock: RawStock; board: RawBoard }[] = []
-  const seenCodes = new Map<string, number>()
-  limitUpEntries.forEach((entry, i) => {
-    const code = entry.stock.stock_code
-    if (!seenCodes.has(code)) {
-      seenCodes.set(code, dedupedEntries.length)
-      dedupedEntries.push(entry)
-    } else {
-      const existingIdx = seenCodes.get(code)!
-      const existing = dedupedEntries[existingIdx]
-      if (entry.board.rank < existing.board.rank) {
-        dedupedEntries[existingIdx] = entry
-      }
-    }
-  })
-
-  const batchSize = 5
-  const klineResults: KlinePoint[][] = []
-  for (let i = 0; i < dedupedEntries.length; i += batchSize) {
-    const batch = dedupedEntries.slice(i, i + batchSize)
-    const results = await Promise.all(
-      batch.map(({ stock }) => fetchStockKline(stock.stock_code, stock.stock_name, 15))
-    )
-    klineResults.push(...results)
+  if (limitUpStocks.length === 0) {
+    cache.set(cacheKey, [], 60)
+    return []
   }
 
-  const allStocks: LimitBoardItem[] = dedupedEntries.map(({ stock, board }, i) => {
+  const boardTopicMap = new Map<string, string>()
+  boards.forEach((b) => boardTopicMap.set(b.board_code, b.topic_name))
+
+  const deduped = new Map<string, RawStock>()
+  limitUpStocks.forEach((s) => {
+    if (!deduped.has(s.stock_code)) {
+      deduped.set(s.stock_code, s)
+    }
+  })
+  const uniqueStocks = [...deduped.values()]
+
+  const codes = uniqueStocks.map((s) => s.stock_code)
+  const names = uniqueStocks.map((s) => s.stock_name)
+  const klineResults = await fetchStockKlineBatch(codes, names, 15)
+
+  const allStocks: LimitBoardItem[] = uniqueStocks.map((stock, i) => {
     const kline = klineResults[i] || []
     const consecutiveDays = kline.length > 0
       ? calcConsecutiveLimitDays(kline, stock.stock_code, stock.stock_name)
@@ -559,7 +562,7 @@ export async function getLimitBoard(): Promise<LimitBoardItem[]> {
       consecutiveDays * 20 +
       stock.change_percent * 2 +
       (stock.is_leader ? 15 : 0) +
-      (20 - board.rank)
+      (20 - Math.min(i + 1, 20))
     )
 
     return {
@@ -568,7 +571,7 @@ export async function getLimitBoard(): Promise<LimitBoardItem[]> {
       change_percent: stock.change_percent,
       consecutive_limit_days: consecutiveDays,
       is_leader: stock.is_leader,
-      topic_name: board.topic_name,
+      topic_name: '涨停板',
       heat,
     }
   })
@@ -580,7 +583,7 @@ export async function getLimitBoard(): Promise<LimitBoardItem[]> {
     return b.heat - a.heat
   })
 
-  cache.set(cacheKey, allStocks, 300)
+  cache.set(cacheKey, allStocks, 120)
   return allStocks
 }
 

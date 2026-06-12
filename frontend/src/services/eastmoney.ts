@@ -364,6 +364,61 @@ export interface RawStock {
   consecutive_limit_days: number
 }
 
+export async function fetchLimitUpStocks(): Promise<RawStock[]> {
+  const cacheKey = 'limit_up_stocks'
+  const cached = cache.get<RawStock[]>(cacheKey)
+  if (cached) return cached
+
+  const url = emUrl('/api/qt/clist/get')
+  const params: Record<string, string | number> = {
+    pn: 1, pz: 100, po: 1, np: 1, fltt: 2, invt: 2, fid: 'f3',
+    fs: 'b:BK0815',
+    fields: 'f2,f3,f4,f12,f14,f127,f140,f136',
+  }
+
+  try {
+    const data = await jsonp<{ rc: number; data?: { diff: Record<string, unknown>[] } }>(url, params)
+    if (data.rc !== 0 || !data.data) return []
+
+    const stocks: RawStock[] = []
+    const diff = data.data.diff || []
+    for (let i = 0; i < diff.length; i++) {
+      const item = diff[i]
+      const code = String(item.f12 || '')
+      const change = safeFloat(item.f3, 0)
+      const name = String(item.f14 || '')
+      if (!name || !code) continue
+      stocks.push({
+        stock_code: code,
+        stock_name: name,
+        change_percent: change,
+        is_leader: i === 0,
+        is_limit_up: true,
+        consecutive_limit_days: 1,
+      })
+    }
+    cache.set(cacheKey, stocks, 120)
+    return stocks
+  } catch (e) {
+    console.error('[EM] fetchLimitUpStocks error:', e)
+    return []
+  }
+}
+
+export async function fetchStockKlineBatch(codes: string[], names: string[], days = 15): Promise<KlinePoint[][]> {
+  const results: KlinePoint[][] = []
+  const batchSize = 8
+  for (let i = 0; i < codes.length; i += batchSize) {
+    const batchCodes = codes.slice(i, i + batchSize)
+    const batchNames = names.slice(i, i + batchSize)
+    const batchResults = await Promise.all(
+      batchCodes.map((code, j) => fetchStockKline(code, batchNames[j], days))
+    )
+    results.push(...batchResults)
+  }
+  return results
+}
+
 export async function fetchBoardStocks(boardCode: string, topN = 10): Promise<RawStock[]> {
   const cacheKey = `stocks_${boardCode}`
   const cached = cache.get<RawStock[]>(cacheKey)

@@ -3,7 +3,7 @@ import { getRotationAnalysis, getRelationGraph, getHistoryMatch, getPredictions,
 import type { RotationAnalysisData, RelationNode, RelationEdge, HistoryMatchItem, PredictData, HeatmapDay } from '@/types'
 import RelationGraph from '@/components/RelationGraph'
 import StrengthIndicator from '@/components/StrengthIndicator'
-import { RefreshCw } from 'lucide-react'
+import { RefreshCw, TrendingUp, TrendingDown, HelpCircle } from 'lucide-react'
 import ReactECharts from 'echarts-for-react'
 import type { EChartsOption } from 'echarts'
 import clsx from 'clsx'
@@ -122,6 +122,13 @@ export default function RotationAnalysisPage() {
     ],
   }), [heatmapSeriesData, dateSet, topicSet])
 
+  const mainLineStrength = useMemo(() => {
+    if (!analysis) return 50
+    const days = analysis.main_line_days
+    const speed = analysis.rotation_speed
+    return Math.min(100, Math.max(10, days * 15 + (speed < 0.3 ? 30 : speed < 0.6 ? 15 : 5)))
+  }, [analysis])
+
   if (loading) {
     return (
       <div className="px-4 pt-3 pb-4 space-y-3 tab-bar-safe-area">
@@ -166,9 +173,12 @@ export default function RotationAnalysisPage() {
               <span className="text-sm font-bold text-up">{analysis.main_line_topic || '-'}</span>
             </div>
             <div>
-              <span className="text-xs text-slate-400">主线持续</span>
+              <span className="text-xs text-slate-400">主线强度</span>
               <div className="mt-1">
-                <StrengthIndicator score={Math.min(analysis.main_line_days * 12, 100)} size="sm" />
+                <StrengthIndicator score={mainLineStrength} size="sm" />
+              </div>
+              <div className="text-[10px] text-slate-500 mt-1">
+                主线持续{analysis.main_line_days}天 · 评分基于持续天数与轮动速度
               </div>
             </div>
             <div className="flex items-center justify-between">
@@ -183,13 +193,21 @@ export default function RotationAnalysisPage() {
             </div>
             <div className="flex items-center justify-between">
               <span className="text-xs text-slate-400">轮动速度</span>
-              <span className="text-sm font-medium text-slate-300">
-                {(analysis.rotation_speed * 100).toFixed(0)}%
-              </span>
+              <div className="flex items-center gap-2">
+                <div className="w-16 h-1.5 bg-slate-700 rounded-full overflow-hidden">
+                  <div className="h-full bg-up/70 rounded-full transition-all duration-500"
+                    style={{ width: `${analysis.rotation_speed * 100}%` }} />
+                </div>
+                <span className="text-sm font-medium text-slate-300">
+                  {(analysis.rotation_speed * 100).toFixed(0)}%
+                </span>
+              </div>
             </div>
             {analysis.active_topics.length > 0 && (
               <div>
-                <span className="text-xs text-slate-400">活跃题材</span>
+                <span className="text-xs text-slate-400 flex items-center gap-1">
+                  <TrendingUp size={10} className="text-up" /> 活跃题材
+                </span>
                 <div className="flex flex-wrap gap-1.5 mt-1.5">
                   {analysis.active_topics.slice(0, 6).map((t) => (
                     <span key={t} className="badge bg-up/10 text-up">{t}</span>
@@ -199,7 +217,9 @@ export default function RotationAnalysisPage() {
             )}
             {analysis.fading_topics.length > 0 && (
               <div>
-                <span className="text-xs text-slate-400">退潮题材</span>
+                <span className="text-xs text-slate-400 flex items-center gap-1">
+                  <TrendingDown size={10} className="text-down" /> 退潮题材
+                </span>
                 <div className="flex flex-wrap gap-1.5 mt-1.5">
                   {analysis.fading_topics.map((t) => (
                     <span key={t} className="badge bg-down/10 text-down">{t}</span>
@@ -255,7 +275,7 @@ export default function RotationAnalysisPage() {
         <div className="card p-3.5">
           <h3 className="text-sm font-semibold text-white mb-3">明日预测</h3>
           <div className="mb-3 flex items-center gap-2">
-            <span className="text-xs text-slate-400">置信度</span>
+            <span className="text-xs text-slate-400">整体置信度</span>
             <div className="flex-1 h-1.5 bg-slate-700 rounded-full overflow-hidden">
               <div
                 className="h-full bg-up rounded-full transition-all duration-500"
@@ -265,7 +285,7 @@ export default function RotationAnalysisPage() {
             <span className="text-xs text-up font-medium">{(predict.confidence * 100).toFixed(0)}%</span>
           </div>
           <div className="space-y-2">
-            {predict.predicted_topics.map((topic, i) => (
+            {predict.predicted_details.map((topic, i) => (
               <div key={i} className="flex items-start gap-3 p-2.5 bg-bg-primary/50 rounded-lg">
                 <span className={clsx(
                   'text-xs font-bold w-5 text-center flex-shrink-0',
@@ -274,13 +294,43 @@ export default function RotationAnalysisPage() {
                   {i + 1}
                 </span>
                 <div className="flex-1 min-w-0">
-                  <span className="text-sm font-medium text-white">{topic}</span>
+                  <div className="flex items-center justify-between">
+                    <span className="text-sm font-medium text-white">{topic.name}</span>
+                    <div className="flex items-center gap-1.5">
+                      <div className="w-10 h-1 bg-slate-700 rounded-full overflow-hidden">
+                        <div
+                          className={clsx(
+                            'h-full rounded-full',
+                            topic.probability >= 0.7 ? 'bg-up' :
+                            topic.probability >= 0.4 ? 'bg-orange-400' :
+                            'bg-slate-500'
+                          )}
+                          style={{ width: `${topic.probability * 100}%` }}
+                        />
+                      </div>
+                      <span className={clsx(
+                        'text-[10px] font-bold',
+                        topic.probability >= 0.7 ? 'text-up' :
+                        topic.probability >= 0.4 ? 'text-orange-400' :
+                        'text-slate-400'
+                      )}>
+                        {(topic.probability * 100).toFixed(0)}%
+                      </span>
+                    </div>
+                  </div>
+                  <p className="text-[10px] text-slate-500 mt-0.5">{topic.reason}</p>
                 </div>
               </div>
             ))}
           </div>
           {predict.reasoning && (
-            <p className="text-xs text-slate-400 mt-3 leading-relaxed">{predict.reasoning}</p>
+            <div className="mt-3 px-2 py-1.5 bg-slate-800/50 rounded-lg">
+              <div className="flex items-center gap-1 mb-1">
+                <HelpCircle size={10} className="text-slate-500" />
+                <span className="text-[10px] text-slate-500">预测说明</span>
+              </div>
+              <p className="text-[10px] text-slate-400 leading-relaxed">{predict.reasoning}</p>
+            </div>
           )}
         </div>
       )}

@@ -123,8 +123,15 @@ export interface HistoryMatchItem {
   next_day_market_change: number
 }
 
+export interface PredictTopic {
+  name: string
+  probability: number
+  reason: string
+}
+
 export interface PredictData {
   predicted_topics: string[]
+  predicted_details: PredictTopic[]
   confidence: number
   reasoning: string
   pattern_match: string | null

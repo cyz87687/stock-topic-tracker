@@ -1,5 +1,5 @@
 import { useState, useEffect, useCallback, useMemo } from 'react'
-import { RefreshCw, Flame, ArrowDown } from 'lucide-react'
+import { RefreshCw, Flame, ArrowDown, Loader2 } from 'lucide-react'
 import { getLimitBoard, refreshCache } from '@/api'
 import type { LimitBoardItem } from '@/types'
 import { formatPercent, getChangeColor } from '@/utils/helpers'
@@ -12,15 +12,20 @@ export default function LimitBoard() {
   const [loading, setLoading] = useState(true)
   const [refreshing, setRefreshing] = useState(false)
   const [sortKey, setSortKey] = useState<SortKey>('limit_days')
-  const [sortAnimating, setSortAnimating] = useState(false)
+  const [sortTransition, setSortTransition] = useState(false)
+  const [loadProgress, setLoadProgress] = useState('')
 
   const fetchData = useCallback(async () => {
     setLoading(true)
+    setLoadProgress('正在获取涨停股数据...')
     try {
+      setLoadProgress('正在计算连板天数...')
       const data = await getLimitBoard()
       setStocks(data)
+      setLoadProgress('')
     } catch {
       setStocks([])
+      setLoadProgress('')
     } finally {
       setLoading(false)
     }
@@ -40,9 +45,9 @@ export default function LimitBoard() {
 
   const handleSortChange = (key: SortKey) => {
     if (key === sortKey) return
-    setSortAnimating(true)
+    setSortTransition(true)
     setSortKey(key)
-    setTimeout(() => setSortAnimating(false), 300)
+    setTimeout(() => setSortTransition(false), 250)
   }
 
   const sortedStocks = useMemo(() => {
@@ -63,12 +68,20 @@ export default function LimitBoard() {
     return sorted
   }, [stocks, sortKey])
 
+  const maxHeat = useMemo(() => {
+    if (sortedStocks.length === 0) return 1
+    return Math.max(...sortedStocks.map((s) => s.heat), 1)
+  }, [sortedStocks])
+
   return (
     <div className="px-4 pt-3 pb-4 space-y-3 tab-bar-safe-area">
       <div className="flex items-center justify-between">
         <h2 className="text-base font-bold text-white flex items-center gap-2">
           <Flame size={18} className="text-up" />
           连板榜
+          {!loading && stocks.length > 0 && (
+            <span className="text-xs text-slate-500 font-normal">共{stocks.length}只涨停</span>
+          )}
         </h2>
         <button onClick={handleRefresh} disabled={refreshing}
           className={clsx('p-2 rounded-lg transition-all', refreshing ? 'bg-up/20 text-up' : 'bg-slate-800 text-slate-400 hover:text-white hover:bg-slate-700')}>
@@ -78,20 +91,21 @@ export default function LimitBoard() {
 
       <div className="flex gap-1.5">
         <button onClick={() => handleSortChange('limit_days')}
-          className={clsx('px-3 py-1 rounded-full text-xs font-medium transition-all duration-200 flex items-center gap-1',
+          className={clsx('px-3 py-1.5 rounded-full text-xs font-medium transition-all duration-200 flex items-center gap-1',
             sortKey === 'limit_days' ? 'bg-up/20 text-up scale-105' : 'bg-slate-800 text-slate-400 hover:bg-slate-700')}>
           按连板天数
           {sortKey === 'limit_days' && <ArrowDown size={10} />}
         </button>
         <button onClick={() => handleSortChange('heat')}
-          className={clsx('px-3 py-1 rounded-full text-xs font-medium transition-all duration-200 flex items-center gap-1',
+          className={clsx('px-3 py-1.5 rounded-full text-xs font-medium transition-all duration-200 flex items-center gap-1',
             sortKey === 'heat' ? 'bg-up/20 text-up scale-105' : 'bg-slate-800 text-slate-400 hover:bg-slate-700')}>
           按市场热度
           {sortKey === 'heat' && <ArrowDown size={10} />}
         </button>
       </div>
 
-      <div className="text-xs text-slate-500 px-1">
+      <div className={clsx('text-xs text-slate-500 px-1 transition-opacity duration-200',
+        sortTransition ? 'opacity-0' : 'opacity-100')}>
         {sortKey === 'limit_days'
           ? '连板天数 = 连续涨停交易日数，反映个股短期强势程度'
           : '市场热度 = 连板天数×20 + 涨幅×2 + 龙头加成 + 排名加成'}
@@ -99,9 +113,9 @@ export default function LimitBoard() {
 
       {loading ? (
         <div className="space-y-2">
-          <div className="flex items-center gap-2 px-3 py-2 bg-up/10 rounded-lg">
-            <RefreshCw size={14} className="text-up animate-spin" />
-            <span className="text-xs text-up">正在加载连板数据，计算连板天数中...</span>
+          <div className="flex items-center gap-2 px-3 py-2.5 bg-up/10 rounded-lg">
+            <Loader2 size={14} className="text-up animate-spin" />
+            <span className="text-xs text-up">{loadProgress || '正在加载连板数据...'}</span>
           </div>
           {Array.from({length: 5}).map((_, i) => (
             <div key={i} className="card p-3"><div className="flex items-center gap-3">
@@ -116,14 +130,15 @@ export default function LimitBoard() {
           <p className="text-sm">今日暂无连板股</p>
         </div>
       ) : (
-        <div className={clsx('space-y-2 transition-opacity duration-300', sortAnimating ? 'opacity-50' : 'opacity-100')}>
+        <div className={clsx('space-y-2 transition-opacity duration-250', sortTransition ? 'opacity-40' : 'opacity-100')}>
           {sortedStocks.map((stock, i) => (
-            <div key={stock.stock_code} className="card p-3 animate-fade-in" style={{animationDelay: `${i * 30}ms`}}>
+            <div key={stock.stock_code} className="card p-3 animate-fade-in" style={{animationDelay: `${i * 20}ms`}}>
               <div className="flex items-center gap-3">
-                <div className={clsx('w-8 h-8 rounded-lg flex items-center justify-center text-sm font-bold flex-shrink-0',
+                <div className={clsx('w-9 h-9 rounded-lg flex items-center justify-center text-sm font-bold flex-shrink-0',
                   stock.consecutive_limit_days >= 5 ? 'bg-up text-white' :
                   stock.consecutive_limit_days >= 3 ? 'bg-up/70 text-white' :
-                  'bg-up/30 text-up'
+                  stock.consecutive_limit_days >= 2 ? 'bg-up/40 text-up' :
+                  'bg-up/20 text-up'
                 )}>
                   {stock.consecutive_limit_days}
                 </div>
@@ -137,18 +152,25 @@ export default function LimitBoard() {
                     <span className={clsx('text-xs font-medium', getChangeColor(stock.change_percent))}>
                       {formatPercent(stock.change_percent)}
                     </span>
-                    <span className="text-[10px] text-slate-500">{stock.topic_name}</span>
+                    {stock.consecutive_limit_days >= 2 && (
+                      <span className={clsx('text-[10px] font-bold px-1.5 py-0.5 rounded',
+                        stock.consecutive_limit_days >= 5 ? 'bg-up/20 text-up' :
+                        stock.consecutive_limit_days >= 3 ? 'bg-orange-500/20 text-orange-400' :
+                        'bg-up/10 text-up/80'
+                      )}>
+                        {stock.consecutive_limit_days}连板
+                      </span>
+                    )}
                   </div>
                 </div>
                 <div className="text-right flex-shrink-0">
-                  <div className={clsx('text-xs font-bold',
-                    stock.consecutive_limit_days >= 5 ? 'text-up' :
-                    stock.consecutive_limit_days >= 3 ? 'text-orange-400' :
-                    'text-slate-400'
-                  )}>
-                    {stock.consecutive_limit_days}连板
+                  <div className="flex items-center gap-1.5">
+                    <span className="text-[10px] text-slate-500">热度</span>
+                    <div className="w-12 h-1 bg-slate-700 rounded-full overflow-hidden">
+                      <div className="h-full bg-orange-400/70 rounded-full" style={{width: `${stock.heat / maxHeat * 100}%`}} />
+                    </div>
                   </div>
-                  <div className="text-[10px] text-orange-400">热度 {stock.heat}</div>
+                  <div className="text-xs font-bold text-orange-400 mt-0.5">{stock.heat}</div>
                 </div>
               </div>
             </div>

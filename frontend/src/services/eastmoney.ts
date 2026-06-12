@@ -1,5 +1,17 @@
 import * as cache from './cache'
 
+const IS_DEV = import.meta.env.DEV
+
+function emUrl(path: string): string {
+  if (IS_DEV) return `/em${path}`
+  return `http://push2.eastmoney.com${path}`
+}
+
+function emHisUrl(path: string): string {
+  if (IS_DEV) return `/emhis${path}`
+  return `http://push2his.eastmoney.com${path}`
+}
+
 function jsonp<T>(url: string, params: Record<string, string | number>): Promise<T> {
   return new Promise((resolve, reject) => {
     const cbName = `__stk_cb_${Date.now()}_${Math.random().toString(36).slice(2, 8)}`
@@ -91,7 +103,7 @@ export async function fetchConceptBoards(topN = 20): Promise<RawBoard[]> {
   const cached = cache.get<RawBoard[]>(cacheKey)
   if (cached) return cached
 
-  const url = 'http://push2.eastmoney.com/api/qt/clist/get'
+  const url = emUrl('/api/qt/clist/get')
   const params: Record<string, string | number> = {
     pn: 1, pz: topN, po: 1, np: 1, fltt: 2, invt: 2, fid: 'f3',
     fs: 'm:90+t:3',
@@ -140,7 +152,7 @@ export async function fetchAllConceptBoards(): Promise<RawBoard[]> {
   const cached = cache.get<RawBoard[]>(cacheKey)
   if (cached) return cached
 
-  const url = 'http://push2.eastmoney.com/api/qt/clist/get'
+  const url = emUrl('/api/qt/clist/get')
   const params: Record<string, string | number> = {
     pn: 1, pz: 500, po: 1, np: 1, fltt: 2, invt: 2, fid: 'f3',
     fs: 'm:90+t:3',
@@ -181,7 +193,7 @@ export async function fetchMarketIndices(): Promise<{ sh: number; cyb: number }>
   const cached = cache.get<{ sh: number; cyb: number }>(cacheKey)
   if (cached) return cached
 
-  const url = 'http://push2.eastmoney.com/api/qt/stock/get'
+  const url = emUrl('/api/qt/stock/get')
   const results: { sh: number; cyb: number } = { sh: 0, cyb: 0 }
 
   for (const [secid, key] of [['1.000001', 'sh'], ['0.399006', 'cyb']] as const) {
@@ -218,7 +230,7 @@ export async function fetchBoardKline(boardCode: string, days = 45): Promise<Kli
   const beg = start.toISOString().slice(0, 10).replace(/-/g, '')
   const endStr = end.toISOString().slice(0, 10).replace(/-/g, '')
 
-  const url = 'http://push2his.eastmoney.com/api/qt/stock/kline/get'
+  const url = emHisUrl('/api/qt/stock/kline/get')
   const params: Record<string, string | number> = {
     secid: `90.${boardCode}`,
     fields1: 'f1,f2,f3,f4,f5,f6',
@@ -259,7 +271,7 @@ export async function fetchIndexKline(secid: string, days = 45): Promise<Record<
   const beg = start.toISOString().slice(0, 10).replace(/-/g, '')
   const endStr = end.toISOString().slice(0, 10).replace(/-/g, '')
 
-  const url = 'http://push2his.eastmoney.com/api/qt/stock/kline/get'
+  const url = emHisUrl('/api/qt/stock/kline/get')
   const params: Record<string, string | number> = {
     secid,
     fields1: 'f1,f2,f3,f4,f5,f6',
@@ -298,7 +310,7 @@ export async function fetchBoardStocks(boardCode: string, topN = 10): Promise<Ra
   const cached = cache.get<RawStock[]>(cacheKey)
   if (cached) return cached
 
-  const url = 'http://push2.eastmoney.com/api/qt/clist/get'
+  const url = emUrl('/api/qt/clist/get')
   const params: Record<string, string | number> = {
     pn: 1, pz: topN, po: 1, np: 1, fltt: 2, invt: 2, fid: 'f3',
     fs: `b:${boardCode}`,

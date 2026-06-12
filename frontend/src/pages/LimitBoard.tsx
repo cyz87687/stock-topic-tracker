@@ -1,6 +1,5 @@
 import { useState, useEffect, useCallback } from 'react'
 import { RefreshCw, Flame } from 'lucide-react'
-import { useStore } from '@/store/useStore'
 import { getLimitBoard, refreshCache } from '@/api'
 import type { LimitBoardItem } from '@/types'
 import { formatPercent, getChangeColor } from '@/utils/helpers'
@@ -9,7 +8,6 @@ import clsx from 'clsx'
 type SortKey = 'limit_days' | 'heat'
 
 export default function LimitBoard() {
-  const currentDate = useStore((s) => s.currentDate)
   const [stocks, setStocks] = useState<LimitBoardItem[]>([])
   const [loading, setLoading] = useState(true)
   const [refreshing, setRefreshing] = useState(false)
@@ -18,14 +16,14 @@ export default function LimitBoard() {
   const fetchData = useCallback(async () => {
     setLoading(true)
     try {
-      const data = await getLimitBoard(currentDate, sortKey)
+      const data = await getLimitBoard(sortKey)
       setStocks(data)
     } catch {
       setStocks([])
     } finally {
       setLoading(false)
     }
-  }, [currentDate, sortKey])
+  }, [sortKey])
 
   useEffect(() => { fetchData() }, [fetchData])
 

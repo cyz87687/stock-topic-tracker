@@ -26,13 +26,3 @@ export function formatAmount(value: number): string {
   if (abs >= 10000) return `${sign}${(abs / 10000).toFixed(2)}万`
   return `${sign}${abs.toFixed(2)}`
 }
-
-export function shiftDate(dateStr: string, offset: number): string {
-  const d = new Date(dateStr)
-  d.setDate(d.getDate() + offset)
-  return d.toISOString().slice(0, 10)
-}
-
-export function getTodayStr(): string {
-  return new Date().toISOString().slice(0, 10)
-}

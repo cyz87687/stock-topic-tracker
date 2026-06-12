@@ -1,7 +1,7 @@
-import { useState, useEffect, useCallback, useRef } from 'react'
-import { ChevronLeft, ChevronRight, RefreshCw } from 'lucide-react'
-import { useStore } from '@/store/useStore'
+import { useState, useEffect, useCallback } from 'react'
+import { RefreshCw } from 'lucide-react'
 import { getDailyTopics, getMarketOverview, refreshCache } from '@/api'
+import { getTodayStr } from '@/store/useStore'
 import type { DailyTopic, MarketOverviewData } from '@/types'
 import MarketOverview from '@/components/MarketOverview'
 import TopicCard from '@/components/TopicCard'
@@ -16,22 +16,18 @@ const sortMap: Record<SortKey, string> = {
 }
 
 export default function Home() {
-  const currentDate = useStore((s) => s.currentDate)
-  const setDate = useStore((s) => s.setDate)
-
   const [topics, setTopics] = useState<DailyTopic[]>([])
   const [market, setMarket] = useState<MarketOverviewData | null>(null)
   const [loading, setLoading] = useState(true)
   const [refreshing, setRefreshing] = useState(false)
   const [sortKey, setSortKey] = useState<SortKey>('change')
-  const refreshTimer = useRef<ReturnType<typeof setTimeout> | null>(null)
 
   const fetchData = useCallback(async (showLoading = true) => {
     if (showLoading) setLoading(true)
     try {
       const [topicData, marketData] = await Promise.all([
-        getDailyTopics(currentDate),
-        getMarketOverview(currentDate),
+        getDailyTopics(),
+        getMarketOverview(),
       ])
       setTopics(topicData)
       setMarket(marketData.overview)
@@ -41,17 +37,11 @@ export default function Home() {
     } finally {
       setLoading(false)
     }
-  }, [currentDate])
+  }, [])
 
   useEffect(() => {
     fetchData()
   }, [fetchData])
-
-  useEffect(() => {
-    return () => {
-      if (refreshTimer.current) clearTimeout(refreshTimer.current)
-    }
-  }, [])
 
   const handleRefresh = async () => {
     if (refreshing) return
@@ -65,9 +55,6 @@ export default function Home() {
       setRefreshing(false)
     }
   }
-
-  const handlePrevDay = () => setDate(shiftDate(currentDate, -1))
-  const handleNextDay = () => setDate(shiftDate(currentDate, 1))
 
   const handleTopicClick = (name: string) => {
     window.location.hash = `/topic/${encodeURIComponent(name)}`
@@ -87,23 +74,19 @@ export default function Home() {
     return calcProfitEffect(b) - calcProfitEffect(a)
   })
 
+  const today = getTodayStr()
+
   return (
     <div className="px-4 pt-3 pb-4 space-y-3 tab-bar-safe-area">
       {market && <MarketOverview data={market} />}
 
       <div className="flex items-center justify-between">
-        <button onClick={handlePrevDay} className="btn-ghost p-1.5 rounded-lg">
-          <ChevronLeft size={18} />
-        </button>
-        <span className="text-sm font-medium text-slate-300">{currentDate}</span>
-        <button onClick={handleNextDay} className="btn-ghost p-1.5 rounded-lg">
-          <ChevronRight size={18} />
-        </button>
+        <span className="text-sm font-medium text-slate-300">{today}</span>
         <button
           onClick={handleRefresh}
           disabled={refreshing}
           className={clsx(
-            'ml-2 p-1.5 rounded-lg transition-all',
+            'p-1.5 rounded-lg transition-all',
             refreshing
               ? 'bg-up/20 text-up'
               : 'bg-slate-800 text-slate-400 hover:text-white hover:bg-slate-700'
@@ -174,10 +157,4 @@ export default function Home() {
       )}
     </div>
   )
-}
-
-function shiftDate(dateStr: string, offset: number): string {
-  const d = new Date(dateStr)
-  d.setDate(d.getDate() + offset)
-  return d.toISOString().slice(0, 10)
 }

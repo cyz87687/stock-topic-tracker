@@ -1,5 +1,4 @@
-import { useState, useEffect, useCallback, useRef } from 'react'
-import { useStore } from '@/store/useStore'
+import { useState, useEffect, useCallback } from 'react'
 import { getDailyTopics, getTopicTrend, getTopicStrength, refreshCache } from '@/api'
 import { formatPercent, getChangeColor, getStrengthLevel } from '@/utils/helpers'
 import type { DailyTopic, TopicTrendItem, TopicStrengthData } from '@/types'
@@ -11,7 +10,6 @@ import ReactECharts from 'echarts-for-react'
 import type { EChartsOption } from 'echarts'
 
 export default function StrengthAnalysis() {
-  const currentDate = useStore((s) => s.currentDate)
   const [topics, setTopics] = useState<DailyTopic[]>([])
   const [selectedTopic, setSelectedTopic] = useState<string>('')
   const [trend, setTrend] = useState<TopicTrendItem[]>([])
@@ -21,7 +19,7 @@ export default function StrengthAnalysis() {
 
   const fetchTopics = useCallback(async () => {
     try {
-      const data = await getDailyTopics(currentDate)
+      const data = await getDailyTopics()
       setTopics(data)
       if (data.length > 0 && !selectedTopic) {
         setSelectedTopic(data[0].topic_name)
@@ -29,7 +27,7 @@ export default function StrengthAnalysis() {
     } catch {
       setTopics([])
     }
-  }, [currentDate, selectedTopic])
+  }, [selectedTopic])
 
   const fetchDetail = useCallback(async (showLoading = true) => {
     if (!selectedTopic) return

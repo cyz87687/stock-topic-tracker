@@ -23,6 +23,18 @@ export default defineConfig({
   server: {
     host: '0.0.0.0',
     port: 5173,
+    proxy: {
+      '/em': {
+        target: 'http://push2.eastmoney.com',
+        changeOrigin: true,
+        rewrite: (path) => path.replace(/^\/em/, ''),
+      },
+      '/emhis': {
+        target: 'http://push2his.eastmoney.com',
+        changeOrigin: true,
+        rewrite: (path) => path.replace(/^\/emhis/, ''),
+      },
+    },
   },
   preview: {
     host: '0.0.0.0',

@@ -1,5 +1,4 @@
 import { useState, useEffect, useCallback, useMemo } from 'react'
-import { useStore } from '@/store/useStore'
 import { getRotationAnalysis, getRelationGraph, getHistoryMatch, getPredictions, getHeatmap, refreshCache } from '@/api'
 import type { RotationAnalysisData, RelationNode, RelationEdge, HistoryMatchItem, PredictData, HeatmapDay } from '@/types'
 import RelationGraph from '@/components/RelationGraph'
@@ -10,7 +9,6 @@ import type { EChartsOption } from 'echarts'
 import clsx from 'clsx'
 
 export default function RotationAnalysisPage() {
-  const currentDate = useStore((s) => s.currentDate)
   const [analysis, setAnalysis] = useState<RotationAnalysisData | null>(null)
   const [nodes, setNodes] = useState<RelationNode[]>([])
   const [edges, setEdges] = useState<RelationEdge[]>([])

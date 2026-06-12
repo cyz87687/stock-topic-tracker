@@ -35,8 +35,8 @@ function calcConsecutiveDays(kline: KlinePoint[]): number {
   return days
 }
 
-export async function getDailyTopics(date?: string): Promise<DailyTopic[]> {
-  const targetDate = date || today()
+export async function getDailyTopics(): Promise<DailyTopic[]> {
+  const targetDate = today()
   const cacheKey = `daily_${targetDate}`
   const cached = cache.get<DailyTopic[]>(cacheKey)
   if (cached) return cached
@@ -107,7 +107,7 @@ export async function getTopicDetail(name: string): Promise<{ info: TopicInfo; l
   return { info, latest_daily: latest }
 }
 
-export async function getTopicStocks(name: string, _date?: string): Promise<TopicStock[]> {
+export async function getTopicStocks(name: string): Promise<TopicStock[]> {
   const boards = await fetchConceptBoards(20)
   const board = boards.find((b) => b.topic_name === name)
   if (!board) return []
@@ -423,7 +423,7 @@ export async function getPredictions(): Promise<PredictData> {
   return result
 }
 
-export async function getMarketOverview(_date?: string): Promise<MarketOverviewResponse> {
+export async function getMarketOverview(): Promise<MarketOverviewResponse> {
   const cacheKey = 'market_overview'
   const cached = cache.get<MarketOverviewResponse>(cacheKey)
   if (cached) return cached
@@ -497,7 +497,7 @@ export async function getHeatmap(): Promise<HeatmapDay[]> {
   return result
 }
 
-export async function getLimitBoard(_date?: string, sort: string = 'limit_days'): Promise<LimitBoardItem[]> {
+export async function getLimitBoard(sort: string = 'limit_days'): Promise<LimitBoardItem[]> {
   const cacheKey = `limit_board_${sort}`
   const cached = cache.get<LimitBoardItem[]>(cacheKey)
   if (cached) return cached

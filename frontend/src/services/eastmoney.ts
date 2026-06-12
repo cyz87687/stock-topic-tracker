@@ -4,12 +4,12 @@ const IS_DEV = import.meta.env.DEV
 
 function emUrl(path: string): string {
   if (IS_DEV) return `/em${path}`
-  return `http://push2.eastmoney.com${path}`
+  return `https://push2.eastmoney.com${path}`
 }
 
 function emHisUrl(path: string): string {
   if (IS_DEV) return `/emhis${path}`
-  return `http://push2his.eastmoney.com${path}`
+  return `https://push2his.eastmoney.com${path}`
 }
 
 function jsonp<T>(url: string, params: Record<string, string | number>): Promise<T> {

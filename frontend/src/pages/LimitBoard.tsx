@@ -1,4 +1,4 @@
-import { useState, useEffect, useCallback, useMemo } from 'react'
+import { useState, useEffect, useCallback, useMemo, useRef } from 'react'
 import { RefreshCw, Flame, ArrowDown, Loader2 } from 'lucide-react'
 import { getLimitBoard, refreshCache } from '@/api'
 import type { LimitBoardItem } from '@/types'
@@ -14,32 +14,38 @@ export default function LimitBoard() {
   const [sortKey, setSortKey] = useState<SortKey>('limit_days')
   const [sortTransition, setSortTransition] = useState(false)
   const [loadProgress, setLoadProgress] = useState('')
+  const initialLoadRef = useRef(false)
 
-  const fetchData = useCallback(async () => {
-    setLoading(true)
+  const fetchData = useCallback(async (forceRefresh = false) => {
+    if (!forceRefresh) {
+      setLoading(true)
+    }
     setLoadProgress('正在获取涨停股数据...')
     try {
       setLoadProgress('正在计算连板天数...')
-      const data = await getLimitBoard()
+      const data = await getLimitBoard(forceRefresh)
       setStocks(data)
       setLoadProgress('')
     } catch {
-      setStocks([])
       setLoadProgress('')
     } finally {
       setLoading(false)
     }
   }, [])
 
-  useEffect(() => { fetchData() }, [fetchData])
+  useEffect(() => {
+    if (initialLoadRef.current) return
+    initialLoadRef.current = true
+    fetchData()
+  }, [fetchData])
 
   const handleRefresh = async () => {
     if (refreshing) return
     setRefreshing(true)
     try {
       refreshCache()
-      await fetchData()
-    } catch { await fetchData() }
+      await fetchData(true)
+    } catch { await fetchData(true) }
     finally { setRefreshing(false) }
   }
 
@@ -72,6 +78,8 @@ export default function LimitBoard() {
     if (sortedStocks.length === 0) return 1
     return Math.max(...sortedStocks.map((s) => s.heat), 1)
   }, [sortedStocks])
+
+  const showEmpty = !loading && stocks.length === 0
 
   return (
     <div className="px-4 pt-3 pb-4 space-y-3 tab-bar-safe-area">
@@ -124,10 +132,14 @@ export default function LimitBoard() {
             </div></div>
           ))}
         </div>
-      ) : stocks.length === 0 ? (
+      ) : showEmpty ? (
         <div className="flex flex-col items-center py-16 text-slate-500">
           <Flame size={32} className="mb-3 opacity-50" />
           <p className="text-sm">今日暂无连板股</p>
+          <p className="text-xs mt-2 text-slate-600">非交易时段或市场无涨停股时显示</p>
+          <button onClick={handleRefresh} className="mt-4 px-4 py-2 bg-slate-800 text-slate-300 rounded-lg text-xs hover:bg-slate-700 transition-colors">
+            刷新数据
+          </button>
         </div>
       ) : (
         <div className={clsx('space-y-2 transition-opacity duration-250', sortTransition ? 'opacity-40' : 'opacity-100')}>
@@ -160,6 +172,9 @@ export default function LimitBoard() {
                       )}>
                         {stock.consecutive_limit_days}连板
                       </span>
+                    )}
+                    {stock.topic_name && stock.topic_name !== '涨停板' && (
+                      <span className="text-[10px] text-slate-500 truncate max-w-[60px]">{stock.topic_name}</span>
                     )}
                   </div>
                 </div>

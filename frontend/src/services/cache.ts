@@ -22,6 +22,17 @@ export function get<T>(key: string): T | null {
   }
 }
 
+export function getStale<T>(key: string): T | null {
+  try {
+    const raw = localStorage.getItem(CACHE_PREFIX + key)
+    if (!raw) return null
+    const entry: CacheEntry<T> = JSON.parse(raw)
+    return entry.d
+  } catch {
+    return null
+  }
+}
+
 export function set<T>(key: string, data: T, ttl: number = DEFAULT_TTL): void {
   try {
     const entry: CacheEntry<T> = { d: data, t: Date.now(), ttl }

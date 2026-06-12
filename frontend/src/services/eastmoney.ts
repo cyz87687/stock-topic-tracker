@@ -371,7 +371,7 @@ export async function fetchLimitUpStocks(): Promise<RawStock[]> {
 
   const url = emUrl('/api/qt/clist/get')
   const params: Record<string, string | number> = {
-    pn: 1, pz: 200, po: 1, np: 1, fltt: 2, invt: 2, fid: 'f3',
+    pn: 1, pz: 50, po: 1, np: 1, fltt: 2, invt: 2, fid: 'f3',
     fs: 'm:0+t:6,m:0+t:80,m:1+t:2',
     fields: 'f2,f3,f4,f12,f14',
   }
@@ -398,7 +398,7 @@ export async function fetchLimitUpStocks(): Promise<RawStock[]> {
         consecutive_limit_days: 1,
       })
     }
-    cache.set(cacheKey, stocks, 120)
+    cache.set(cacheKey, stocks, 300)
     return stocks
   } catch (e) {
     console.error('[EM] fetchLimitUpStocks error:', e)

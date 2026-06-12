@@ -522,37 +522,65 @@ export async function getHeatmap(): Promise<HeatmapDay[]> {
   return result
 }
 
-export async function getLimitBoard(): Promise<LimitBoardItem[]> {
+export async function getLimitBoard(forceRefresh = false): Promise<LimitBoardItem[]> {
   const cacheKey = 'limit_board_data'
-  const cached = cache.get<LimitBoardItem[]>(cacheKey)
-  if (cached) return cached
+  if (!forceRefresh) {
+    const cached = cache.get<LimitBoardItem[]>(cacheKey)
+    if (cached) return cached
+  }
 
-  const [limitUpStocks, boards] = await Promise.all([
-    fetchLimitUpStocks(),
-    fetchConceptBoards(20),
-  ])
+  const limitUpStocks = await fetchLimitUpStocks()
 
-  if (limitUpStocks.length === 0) {
-    cache.set(cacheKey, [], 60)
+  let stocksToProcess: RawStock[]
+  let topicNames: Map<string, string>
+
+  if (limitUpStocks.length > 0) {
+    const deduped = new Map<string, RawStock>()
+    limitUpStocks.forEach((s) => {
+      if (!deduped.has(s.stock_code)) deduped.set(s.stock_code, s)
+    })
+    stocksToProcess = [...deduped.values()]
+    topicNames = new Map()
+  } else {
+    const boards = await fetchConceptBoards(20)
+    const stockPromises = boards.map((b) => fetchBoardStocks(b.board_code, 10))
+    const stockResults = await Promise.all(stockPromises)
+
+    const entries: { stock: RawStock; board: RawBoard }[] = []
+    boards.forEach((board, i) => {
+      const stocks = stockResults[i] || []
+      stocks.forEach((s) => {
+        if (s.is_limit_up) entries.push({ stock: s, board })
+      })
+    })
+
+    const deduped = new Map<string, RawStock>()
+    topicNames = new Map<string, string>()
+    entries.forEach(({ stock, board }) => {
+      if (!deduped.has(stock.stock_code)) {
+        deduped.set(stock.stock_code, stock)
+        topicNames.set(stock.stock_code, board.topic_name)
+      } else {
+        const existing = topicNames.get(stock.stock_code)
+        if (!existing || board.rank < boards.findIndex((b) => b.topic_name === existing) + 1) {
+          topicNames.set(stock.stock_code, board.topic_name)
+        }
+      }
+    })
+    stocksToProcess = [...deduped.values()]
+  }
+
+  if (stocksToProcess.length === 0) {
+    const stale = cache.getStale<LimitBoardItem[]>(cacheKey)
+    if (stale) return stale
     return []
   }
 
-  const boardTopicMap = new Map<string, string>()
-  boards.forEach((b) => boardTopicMap.set(b.board_code, b.topic_name))
-
-  const deduped = new Map<string, RawStock>()
-  limitUpStocks.forEach((s) => {
-    if (!deduped.has(s.stock_code)) {
-      deduped.set(s.stock_code, s)
-    }
-  })
-  const uniqueStocks = [...deduped.values()]
-
-  const codes = uniqueStocks.map((s) => s.stock_code)
-  const names = uniqueStocks.map((s) => s.stock_name)
+  const codes = stocksToProcess.map((s) => s.stock_code)
+  const names = stocksToProcess.map((s) => s.stock_name)
   const klineResults = await fetchStockKlineBatch(codes, names, 15)
 
-  const allStocks: LimitBoardItem[] = uniqueStocks.map((stock, i) => {
+  const allStocks: LimitBoardItem[] = stocksToProcess.map((stock, i) => {
     const kline = klineResults[i] || []
     const consecutiveDays = kline.length > 0
       ? calcConsecutiveLimitDays(kline, stock.stock_code, stock.stock_name)
@@ -571,7 +599,7 @@ export async function getLimitBoard(): Promise<LimitBoardItem[]> {
       change_percent: stock.change_percent,
       consecutive_limit_days: consecutiveDays,
       is_leader: stock.is_leader,
-      topic_name: '涨停板',
+      topic_name: topicNames.get(stock.stock_code) || '涨停板',
       heat,
     }
   })
@@ -583,7 +611,7 @@ export async function getLimitBoard(): Promise<LimitBoardItem[]> {
     return b.heat - a.heat
   })
 
-  cache.set(cacheKey, allStocks, 120)
+  cache.set(cacheKey, allStocks, 600)
   return allStocks
 }
 

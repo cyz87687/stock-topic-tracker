@@ -120,7 +120,7 @@ export async function fetchStockKline(code: string, name: string, days = 15): Pr
     secid,
     fields1: 'f1,f2,f3,f4,f5,f6',
     fields2: 'f51,f52,f53,f54,f55,f56,f57,f58,f59,f60,f61',
-    klt: 101, fqt: 1, beg, end: endStr,
+    klt: 101, fqt: 0, beg, end: endStr,
   }
 
   try {
@@ -371,9 +371,9 @@ export async function fetchLimitUpStocks(): Promise<RawStock[]> {
 
   const url = emUrl('/api/qt/clist/get')
   const params: Record<string, string | number> = {
-    pn: 1, pz: 100, po: 1, np: 1, fltt: 2, invt: 2, fid: 'f3',
-    fs: 'b:BK0815',
-    fields: 'f2,f3,f4,f12,f14,f127,f140,f136',
+    pn: 1, pz: 200, po: 1, np: 1, fltt: 2, invt: 2, fid: 'f3',
+    fs: 'm:0+t:6,m:0+t:80,m:1+t:2',
+    fields: 'f2,f3,f4,f12,f14',
   }
 
   try {
@@ -388,6 +388,7 @@ export async function fetchLimitUpStocks(): Promise<RawStock[]> {
       const change = safeFloat(item.f3, 0)
       const name = String(item.f14 || '')
       if (!name || !code) continue
+      if (!isLimitUp(code, change, name)) continue
       stocks.push({
         stock_code: code,
         stock_name: name,

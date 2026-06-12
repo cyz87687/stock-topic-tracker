@@ -4,7 +4,7 @@ import { formatPercent, getChangeColor, getStrengthLevel } from '@/utils/helpers
 import type { DailyTopic, TopicTrendItem, TopicStrengthData } from '@/types'
 import TrendChart from '@/components/TrendChart'
 import StrengthIndicator from '@/components/StrengthIndicator'
-import { RefreshCw, ChevronLeft, ChevronRight } from 'lucide-react'
+import { RefreshCw, ChevronLeft, ChevronRight, Pin } from 'lucide-react'
 import clsx from 'clsx'
 import ReactECharts from 'echarts-for-react'
 import type { EChartsOption } from 'echarts'
@@ -16,6 +16,7 @@ export default function StrengthAnalysis() {
   const [strength, setStrength] = useState<TopicStrengthData | null>(null)
   const [loading, setLoading] = useState(true)
   const [refreshing, setRefreshing] = useState(false)
+  const [pinnedTopic, setPinnedTopic] = useState<string>('')
   const tabScrollRef = useRef<HTMLDivElement>(null)
   const detailRef = useRef<HTMLDivElement>(null)
 
@@ -71,6 +72,7 @@ export default function StrengthAnalysis() {
 
   const handleTopicSelect = (topicName: string) => {
     setSelectedTopic(topicName)
+    setPinnedTopic(topicName)
     setTimeout(() => {
       detailRef.current?.scrollIntoView({ behavior: 'smooth', block: 'start' })
     }, 100)
@@ -84,6 +86,14 @@ export default function StrengthAnalysis() {
       behavior: 'smooth',
     })
   }
+
+  const displayTopics = (() => {
+    if (!pinnedTopic) return topics.slice(0, 10)
+    const pinned = topics.find((t) => t.topic_name === pinnedTopic)
+    if (!pinned) return topics.slice(0, 10)
+    const rest = topics.filter((t) => t.topic_name !== pinnedTopic).slice(0, 9)
+    return [pinned, ...rest]
+  })()
 
   const barOption: EChartsOption = {
     backgroundColor: 'transparent',
@@ -176,7 +186,18 @@ export default function StrengthAnalysis() {
       </div>
 
       <div className="card p-3.5">
-        <h2 className="text-sm font-semibold text-white mb-3">题材强弱排行</h2>
+        <div className="flex items-center justify-between mb-3">
+          <h2 className="text-sm font-semibold text-white">题材强弱排行</h2>
+          {pinnedTopic && (
+            <button
+              onClick={() => setPinnedTopic('')}
+              className="flex items-center gap-1 text-[10px] text-slate-500 hover:text-slate-300 transition-colors"
+            >
+              <Pin size={10} />
+              取消置顶
+            </button>
+          )}
+        </div>
         <div className="relative">
           <button
             onClick={() => scrollTabs('left')}
@@ -189,20 +210,25 @@ export default function StrengthAnalysis() {
             className="flex gap-2 overflow-x-auto scrollbar-hide py-1 px-5"
             style={{ scrollBehavior: 'smooth', WebkitOverflowScrolling: 'touch' }}
           >
-            {topics.slice(0, 10).map((topic) => {
+            {displayTopics.map((topic) => {
               const level = getStrengthLevel(topic.change_percent)
               const isActive = selectedTopic === topic.topic_name
+              const isPinned = pinnedTopic === topic.topic_name
               return (
                 <button
                   key={topic.id}
                   onClick={() => handleTopicSelect(topic.topic_name)}
                   className={clsx(
-                    'flex-shrink-0 px-3 py-2 rounded-xl text-xs font-medium transition-all duration-200 whitespace-nowrap border',
+                    'flex-shrink-0 px-3 py-2 rounded-xl text-xs font-medium transition-all duration-300 whitespace-nowrap border relative',
                     isActive
                       ? 'bg-up/20 text-up border-up/30 scale-105 shadow-lg shadow-up/10'
-                      : 'bg-slate-800/80 text-slate-400 border-slate-700/50 hover:bg-slate-700 hover:text-slate-300'
+                      : 'bg-slate-800/80 text-slate-400 border-slate-700/50 hover:bg-slate-700 hover:text-slate-300',
+                    isPinned && !isActive && 'border-orange-500/40 bg-orange-500/10'
                   )}
                 >
+                  {isPinned && (
+                    <Pin size={8} className="absolute -top-0.5 -right-0.5 text-orange-400" />
+                  )}
                   <div className="flex items-center gap-1.5">
                     <span className="text-[10px] text-slate-500">{topic.rank}</span>
                     <span className="truncate max-w-[72px]">{topic.topic_name}</span>

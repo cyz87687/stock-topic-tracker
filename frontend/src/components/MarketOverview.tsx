@@ -41,15 +41,15 @@ export default function MarketOverview({ data }: MarketOverviewProps) {
           </div>
         </div>
         <div className="bg-bg-primary/50 rounded-lg p-2.5">
-          <div className="text-[10px] text-slate-500 mb-1">炸板率</div>
+          <div className="text-[10px] text-slate-500 mb-1">题材均幅</div>
           <div className="flex items-center gap-2">
-            <div className="text-base font-bold text-down">
-              {data.broken_limit_rate.toFixed(1)}%
+            <div className={`text-base font-bold ${getChangeColor(data.avg_change_percent)}`}>
+              {formatPercent(data.avg_change_percent)}
             </div>
             <div className="flex-1 h-1.5 bg-slate-700 rounded-full overflow-hidden">
               <div
-                className="h-full bg-down/70 rounded-full transition-all duration-500"
-                style={{ width: `${data.broken_limit_rate}%` }}
+                className={`h-full rounded-full transition-all duration-500 ${data.avg_change_percent >= 0 ? 'bg-up/70' : 'bg-down/70'}`}
+                style={{ width: `${Math.min(Math.abs(data.avg_change_percent) * 10, 100)}%` }}
               />
             </div>
           </div>

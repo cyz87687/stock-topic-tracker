@@ -55,11 +55,11 @@ export default function TopicCard({ topic, onClick, index }: TopicCardProps) {
                 连板 <span className="text-orange-400 font-medium">{topic.consecutive_limit_count}</span>
               </span>
             )}
-            {topic.broken_limit_rate > 0 && (
-              <span>
-                炸板 <span className="text-down font-medium">{topic.broken_limit_rate.toFixed(0)}%</span>
+            <span>
+              均幅 <span className={clsx('font-medium', getChangeColor(topic.avg_change_percent))}>
+                {formatPercent(topic.avg_change_percent)}
               </span>
-            )}
+            </span>
           </div>
 
           <div className="h-1.5 bg-slate-700/50 rounded-full overflow-hidden">

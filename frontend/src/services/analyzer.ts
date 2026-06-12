@@ -57,7 +57,6 @@ export async function getDailyTopics(): Promise<DailyTopic[]> {
   const topics: DailyTopic[] = boards.map((b, i) => {
     const kline = klineMap[b.topic_name] || []
     const consecDays = calcConsecutiveDays(kline)
-    const upLimitCount = 0
     const stockCount = b.stock_count
 
     return {
@@ -67,10 +66,10 @@ export async function getDailyTopics(): Promise<DailyTopic[]> {
       rank: i + 1,
       change_percent: b.change_percent,
       stock_count: stockCount,
-      up_limit_count: upLimitCount,
+      up_limit_count: 0,
       consecutive_up_days: consecDays,
       main_fund_inflow: b.main_fund_net,
-      broken_limit_rate: stockCount > 0 ? Math.round(Math.max(5, 30 - b.change_percent * 2) * 100) / 100 : 0,
+      avg_change_percent: b.change_percent,
       consecutive_limit_count: 0,
       is_new_entry: false,
     }
@@ -82,6 +81,10 @@ export async function getDailyTopics(): Promise<DailyTopic[]> {
     if (i < topics.length) {
       topics[i].up_limit_count = stocks.filter((s) => s.is_limit_up).length
       topics[i].consecutive_limit_count = Math.max(1, Math.floor(topics[i].up_limit_count / 2))
+      if (stocks.length > 0) {
+        const avgChange = stocks.reduce((s, st) => s + st.change_percent, 0) / stocks.length
+        topics[i].avg_change_percent = Math.round(avgChange * 100) / 100
+      }
     }
   })
 
@@ -444,7 +447,9 @@ export async function getMarketOverview(): Promise<MarketOverviewResponse> {
     sh_index_change: indices.sh,
     cyb_index_change: indices.cyb,
     profit_effect_rate: Math.round(totalUp / total * 10000) / 100,
-    broken_limit_rate: Math.round(Math.max(5, 30 - boards.slice(0, 5).reduce((s, b) => s + b.change_percent, 0) / 5 * 2) * 100) / 100,
+    avg_change_percent: boards.length > 0
+      ? Math.round(boards.reduce((s, b) => s + b.change_percent, 0) / boards.length * 100) / 100
+      : 0,
     hot_topic_count: boards.length,
   }
 
@@ -518,17 +523,33 @@ export async function getLimitBoard(): Promise<LimitBoardItem[]> {
     })
   })
 
+  const dedupedEntries: { stock: RawStock; board: RawBoard }[] = []
+  const seenCodes = new Map<string, number>()
+  limitUpEntries.forEach((entry, i) => {
+    const code = entry.stock.stock_code
+    if (!seenCodes.has(code)) {
+      seenCodes.set(code, dedupedEntries.length)
+      dedupedEntries.push(entry)
+    } else {
+      const existingIdx = seenCodes.get(code)!
+      const existing = dedupedEntries[existingIdx]
+      if (entry.board.rank < existing.board.rank) {
+        dedupedEntries[existingIdx] = entry
+      }
+    }
+  })
+
   const batchSize = 5
   const klineResults: KlinePoint[][] = []
-  for (let i = 0; i < limitUpEntries.length; i += batchSize) {
-    const batch = limitUpEntries.slice(i, i + batchSize)
+  for (let i = 0; i < dedupedEntries.length; i += batchSize) {
+    const batch = dedupedEntries.slice(i, i + batchSize)
     const results = await Promise.all(
       batch.map(({ stock }) => fetchStockKline(stock.stock_code, stock.stock_name, 15))
     )
     klineResults.push(...results)
   }
 
-  const allStocks: LimitBoardItem[] = limitUpEntries.map(({ stock, board }, i) => {
+  const allStocks: LimitBoardItem[] = dedupedEntries.map(({ stock, board }, i) => {
     const kline = klineResults[i] || []
     const consecutiveDays = kline.length > 0
       ? calcConsecutiveLimitDays(kline, stock.stock_code, stock.stock_name)

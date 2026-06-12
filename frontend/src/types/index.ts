@@ -8,7 +8,7 @@ export interface DailyTopic {
   up_limit_count: number
   consecutive_up_days: number
   main_fund_inflow: number
-  broken_limit_rate: number
+  avg_change_percent: number
   consecutive_limit_count: number
   is_new_entry: boolean
 }
@@ -50,7 +50,7 @@ export interface MarketOverviewData {
   sh_index_change: number
   cyb_index_change: number
   profit_effect_rate: number
-  broken_limit_rate: number
+  avg_change_percent: number
   hot_topic_count: number
 }
 
